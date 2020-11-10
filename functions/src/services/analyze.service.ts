@@ -1,49 +1,7 @@
 import { IRobinhoodHistoricalsResponse, IHistoricalData } from "../robinhood/types/historicals.type";
 import { IRobinhoodQuoteResponse } from "../robinhood/types/quote.type";
 
-
-// interface IData {
-//   timestamp: string;
-//   historical: IHistoricalData;
-// }
-
-
-
 export class AnalyzeService {
-
-  // /**
-  //  * account for splits
-  //  * NOTE: we can deprecate this. Robinhood now includes a lit field
-  //  */
-  // private accountForSplit(data: IData[]) {
-  //   console.log('accountForSplit', data)
-  //   const historicals = data.map(({ timestamp, historical }) => {
-  //     const splitFactor = historical.adjusted / historical.close;
-  //     const newData: IData = {
-  //       timestamp,
-  //       historical: {
-  //         ...historical,
-  //         high: historical.high * splitFactor,
-  //         low: historical.low * splitFactor,
-  //         open: historical.open * splitFactor,
-  //         close: historical.close * splitFactor,
-  //       }
-  //     };
-  //     return newData;
-  //   });
-  //   return historicals;
-  // }
-
-
-
-  // /**
-  //  * Assume it's initially reverse sorted
-  //  */
-  // private static getSortedData(historicalsResponse: IRobinhoodHistoricalsResponse): IData[] {
-  //   return Object.entries(historicalsResponse.historicals).reverse()
-  //     .map(([t, d]) => ({ timestamp: t, historical: d }));
-  // }
-
   private static average(v1: number, v2: number) {
     return (v1 + v2) / 2;
   }
