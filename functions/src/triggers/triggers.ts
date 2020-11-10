@@ -32,6 +32,7 @@ const openOptions = async () => {
       console.log('done')
    } catch(error) {
       console.log(error);
+      throw error;
    }
 }
 export {openOptions}
