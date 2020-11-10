@@ -8,19 +8,30 @@ export interface IInstrumentLists {
   [key: string]: IInstrumentList;
 }
 
+// db ref
+// NOTE: not in class since can't be accessed from inside of static methods
+const ref = firestore.collection("instrumentsLists");
+
+// NOTE: not in class since can't be accessed from inside of static methods
+function getDocRef(id: string) {
+  return ref.doc(id);
+}
+
 /**
  * Wrapper class around instrumentsLists db collection
  */
 export class InstrumentsLists {
-  // db ref
-  private ref = firestore.collection("instrumentsLists");
+  public list!: string[];
 
+  constructor(fields:Partial<InstrumentsLists>) {
+    Object.assign(this, fields);
+  }
   /**
    * Gets all lists and convert it into a map
    */
-  public getAll = async () => {
+  static getAll = async () => {
     const instrumentsLists: IInstrumentLists = {}
-    const snap = await this.ref.get()
+    const snap = await ref.get()
     snap.docs.forEach(instrumentList =>
       instrumentsLists[instrumentList.id] = instrumentList.data() as IInstrumentList
     )
@@ -31,18 +42,15 @@ export class InstrumentsLists {
    * Updates or creates a travel regulation by country.
    */
   public update(id: string, data: Partial<IInstrumentList>) {
-    return this.ref.doc(id).set(data);
+    return ref.doc(id).set(data);
   }
 
   /**
    * get list by id
    */
-  public async get(id:string) {
-    const entry= await this.getDocRef(id).get();
-    return entry.data();
+  static async get(id:string) {
+    const entry = await getDocRef(id).get();
+    return new InstrumentsLists(entry.data() as Partial<InstrumentsLists>);
   }
 
-  public getDocRef(id: string) {
-    return this.ref.doc(id);
-  }
 }
