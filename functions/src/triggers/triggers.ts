@@ -2,24 +2,32 @@ import { InstrumentsLists } from "../collections/instrumentLists"
 import robinhood from "../robinhood/robinhood";
 import { AnalyzeService } from "../services/analyze.service";
 
-const MY_LIST= 'fcVriOcbeU4JdlpAbTu9';
+const MY_LIST = 'fcVriOcbeU4JdlpAbTu9';
 
 const openOptions = async () => {
    try {
       // get list
       const instrumentsList = await InstrumentsLists.get(MY_LIST);
-      const instrumentId  = instrumentsList.list[0].toUpperCase();
-      console.log({instrumentId});
-      
-      const [historicalRes, quoteRes] = await Promise.all([
-         robinhood.getHistoricals(instrumentId,'10minute','week'),
-         robinhood.getQuote(instrumentId)
+      const instrumentSymbol = instrumentsList.list[0].toUpperCase();
+      console.log({ instrumentSymbol });
+
+      const [
+         historicalRes,
+         quoteRes,
+      ] = await Promise.all([
+         robinhood.getHistoricals(instrumentSymbol, '10minute', 'week'),
+         robinhood.getQuote(instrumentSymbol),
       ]);
-   
+      const optionsChains = await robinhood.getOptionsChains(historicalRes.instrument, 'call');
+      console.log({ optionsChains });
+
+
       // look back 90 days
-      const percentDip  = AnalyzeService.findDipPercent(historicalRes, quoteRes,90);
+      const percentDip = AnalyzeService.findDipPercent(historicalRes, quoteRes, 90);
+      console.log({ percentDip });
+
       // if should open
-      if(percentDip < -0.2) {
+      if (percentDip < -0.2) {
          //   get options cost
          //   find spread costs
          //   add spread to the list
@@ -30,9 +38,9 @@ const openOptions = async () => {
       //   check of order already placed
       //   place order for 90 days
       console.log('done')
-   } catch(error) {
+   } catch (error) {
       console.log(error);
       throw error;
    }
 }
-export {openOptions}
+export { openOptions }

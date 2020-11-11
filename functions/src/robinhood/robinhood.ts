@@ -5,6 +5,7 @@ import { IRobinhoodAccountsResponse } from "./types/account.type";
 import { ICredentials } from "./types/credentials.type";
 import { IInterval, IRobinhoodHistoricalsResponse, ISpan } from "./types/historicals.type";
 import { IRobinhoodInstrument } from "./types/instrument.type";
+import { IOptionChains, IOption, IOptionsChainParent, TOptionType } from "./types/option.type";
 import { IOrder, IOrderResponse, IRobinhoodOrdersResponse } from "./types/order.type";
 import { IPosition, IPositionResponse, IRobinhoodPositionResponse } from "./types/positions.type";
 import { IRobinhoodQuoteResponse } from "./types/quote.type";
@@ -34,7 +35,7 @@ class RobinhoodWrapper {
       return Object.assign({}, position, { symbol: instrument.symbol, simple_name: instrument.simple_name });
     });
     const positionsRes = Object.assign({}, positionResponse, { results: await Promise.all(promises) });
-    this.forceNumber(positionsRes);
+    this.deepCoerceNumber(positionsRes);
     return positionsRes;
   }
 
@@ -53,21 +54,21 @@ class RobinhoodWrapper {
   public async getUser(): Promise<IRobinhoodUser> {
     await this.initPromise;
     const response = await this.httpGet(this.robinhood.user);
-    this.forceNumber(response);
+    this.deepCoerceNumber(response);
     return response as IRobinhoodUser;
   }
 
   public async getQuote(symbol: string): Promise<IRobinhoodQuoteResponse> {
     await this.initPromise;
     const response = await this.httpGet(this.robinhood.quote_data, symbol);
-    this.forceNumber(response);
+    this.deepCoerceNumber(response);
     return response as IRobinhoodQuoteResponse;
   }
 
   public async getAccounts(): Promise<IRobinhoodAccountsResponse> {
     await this.initPromise;
     const response = await this.httpGet(this.robinhood.accounts);
-    this.forceNumber(response);
+    this.deepCoerceNumber(response);
     return response as IRobinhoodAccountsResponse;
   }
 
@@ -82,24 +83,25 @@ class RobinhoodWrapper {
   }
 
   /**
-   * Fetch instrument from Robinhood if it's not already in cache
+   * Fetch instrument from Robinhood if it's not already in cache.
+   * Then, cache result in memory.
    */
-  public async getInstrument(instrumentId: string): Promise<IRobinhoodInstrument> {
+  public async getInstrument(instrumentUrl: string): Promise<IRobinhoodInstrument> {
     await this.initPromise;
     // check cache first
-    if (!this.instruments[instrumentId]) {
-      console.log('getting instrument', this.robinhood.url, instrumentId)
-      this.instruments[instrumentId] = this.httpGet<IRobinhoodInstrument>(this.robinhood.url, instrumentId)
+    if (!this.instruments[instrumentUrl]) {
+      console.log('getting instrument', instrumentUrl)
+      this.instruments[instrumentUrl] = this.httpGet<IRobinhoodInstrument>(this.robinhood.url, instrumentUrl)
         .then(async (instrument: IRobinhoodInstrument) => {
           instrument.fundamentals = await this.httpGet(this.robinhood.url, `${instrument.fundamentals}`);
-          this.forceNumber(instrument);
+          this.deepCoerceNumber(instrument);
           return instrument;
         });
-      console.log('fetching instrument', (await this.instruments[instrumentId]).symbol);
+      console.log('fetching instrument', (await this.instruments[instrumentUrl]).symbol);
     } else {
-      console.log('instrument in cache already', (await this.instruments[instrumentId]).symbol);
+      console.log('instrument in cache already', (await this.instruments[instrumentUrl]).symbol);
     }
-    return this.instruments[instrumentId];
+    return this.instruments[instrumentUrl];
   }
 
   /**
@@ -117,7 +119,7 @@ class RobinhoodWrapper {
     });
     const nextResults = ordersResponse.next ? (await this.getOrders(ordersResponse.next)).results : [];
     const orderRes = Object.assign({}, ordersResponse, { results: [...await Promise.all(promises), ...nextResults] });
-    this.forceNumber(orderRes);
+    this.deepCoerceNumber(orderRes);
     return orderRes
   }
 
@@ -133,7 +135,7 @@ class RobinhoodWrapper {
       interval,
       span,
     );
-    this.forceNumber(response);
+    this.deepCoerceNumber(response);
     return response;
   }
 
@@ -148,20 +150,86 @@ class RobinhoodWrapper {
    * recursively mutates object so all number strings are coerced to number
    * TODO: unit test
    */
-  private forceNumber(parent: any, key?: number | string) {
+  private deepCoerceNumber(parent: any, key?: number | string) {
     const child = key === undefined ? parent : parent[key];
-
-    if (Array.isArray(child) || typeof child === 'object') {
-      Object.keys(child).forEach(k => this.forceNumber(child, k));
+    if (!child) {
+      return;
+    } else if (Array.isArray(child) || typeof child === 'object') {
+      Object.keys(child).forEach(k => this.deepCoerceNumber(child, k));
     } else {
       const forced = Number(child)
       if (!isNaN(forced)) {
-        if(key === undefined) {
+        if (key === undefined) {
           throw new Error('no key');
         }
         parent[key] = forced;
       }
     }
+  }
+
+  /**
+   * Gets option chains of a certain type (call/put) with expirations within a certain time frame
+   * @param timeFrame start & end dates in ms
+   */
+  public async getOptionsChains(
+    instrumentUrl: string,
+    type: TOptionType,
+    timeFrame?: { start: number, end: number }
+  ) {
+    console.log('getting options chains...')
+    const instrument = await this.getInstrument(instrumentUrl);
+    console.log('got instruments');
+    const chainsParent = await this.getChainParent(instrument.tradable_chain_id);
+    console.log('got chainsParent');
+    const getChainPromises: Promise<IOption[]>[] = [];
+    chainsParent.expiration_dates.forEach(d => {
+      // NOTE: assumes server is running at NYC time or later.
+      // NYSE options close at 5:30 (1 hr after market close)
+      const expirationDate = new Date(d + 'T05:30:00').getTime(); // in ms
+      if (!!timeFrame && timeFrame.start < expirationDate && timeFrame.end > expirationDate) {
+        console.log('getting chain', instrument.symbol, d, type);
+        getChainPromises.push(this.getChainByDate(chainsParent.id, d, type));
+      } else if (!timeFrame) {
+        getChainPromises.push(this.getChainByDate(chainsParent.id, d, type));
+      }
+
+    })
+    const chains = await Promise.all(getChainPromises);
+    console.log('got chains');
+    this.deepCoerceNumber(chains);
+    return chains;
+  }
+
+  /**
+   * Get the chain parent. It contains all the ids of all the options chains for 
+   * different expiry dates
+   */
+  private async getChainParent(chainId: string): Promise<IOptionsChainParent> {
+    const url = `https://api.robinhood.com/options/chains/${chainId}/`;
+    return this.httpGet(this.robinhood.url, url);
+  }
+
+  /**
+   * Gets the option chain for one expiry date
+   * @param chainId 
+   * @param expirationDate 
+   * @param type 
+   */
+  public async getChainByDate(chainId: string, expirationDate: string, type: TOptionType) {
+    const url = `https://api.robinhood.com/options/instruments/?chain_id=${chainId}&expiration_dates=${expirationDate}&state=active&type=${type}`
+    return this.getChainByUrl(url);
+  }
+
+  /**
+   * Gets and compile all the options for an option chain
+   */
+  private async getChainByUrl(url: string) {
+    const chain = await this.httpGet<IOptionChains>(this.robinhood.url, url);
+    if (chain.next) {
+      const nextChain = await this.getChainByUrl(chain.next);
+      chain.results.push(...nextChain);
+    }
+    return chain.results;
 
   }
 
