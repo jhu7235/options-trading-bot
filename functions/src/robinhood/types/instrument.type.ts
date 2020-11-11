@@ -19,7 +19,7 @@ export interface IRobinhoodInstrument {
   list_date: string; // date yyyy-mm-dd
   min_tick_size: null;
   type: '';
-  tradable_chain_id: null;
+  tradable_chain_id: string;
   rhs_tradability: string; // 'tradable' | 'untradable'
   fractional_tradability: string; // 'tradable' | 'untradable'
   default_collar_fraction: number;
