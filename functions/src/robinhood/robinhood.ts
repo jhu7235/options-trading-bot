@@ -35,7 +35,7 @@ class RobinhoodWrapper {
       return Object.assign({}, position, { symbol: instrument.symbol, simple_name: instrument.simple_name });
     });
     const positionsRes = Object.assign({}, positionResponse, { results: await Promise.all(promises) });
-    this.coerceNumber(positionsRes);
+    this.deepCoerceNumber(positionsRes);
     return positionsRes;
   }
 
@@ -54,21 +54,21 @@ class RobinhoodWrapper {
   public async getUser(): Promise<IRobinhoodUser> {
     await this.initPromise;
     const response = await this.httpGet(this.robinhood.user);
-    this.coerceNumber(response);
+    this.deepCoerceNumber(response);
     return response as IRobinhoodUser;
   }
 
   public async getQuote(symbol: string): Promise<IRobinhoodQuoteResponse> {
     await this.initPromise;
     const response = await this.httpGet(this.robinhood.quote_data, symbol);
-    this.coerceNumber(response);
+    this.deepCoerceNumber(response);
     return response as IRobinhoodQuoteResponse;
   }
 
   public async getAccounts(): Promise<IRobinhoodAccountsResponse> {
     await this.initPromise;
     const response = await this.httpGet(this.robinhood.accounts);
-    this.coerceNumber(response);
+    this.deepCoerceNumber(response);
     return response as IRobinhoodAccountsResponse;
   }
 
@@ -94,7 +94,7 @@ class RobinhoodWrapper {
       this.instruments[instrumentUrl] = this.httpGet<IRobinhoodInstrument>(this.robinhood.url, instrumentUrl)
         .then(async (instrument: IRobinhoodInstrument) => {
           instrument.fundamentals = await this.httpGet(this.robinhood.url, `${instrument.fundamentals}`);
-          this.coerceNumber(instrument);
+          this.deepCoerceNumber(instrument);
           return instrument;
         });
       console.log('fetching instrument', (await this.instruments[instrumentUrl]).symbol);
@@ -119,7 +119,7 @@ class RobinhoodWrapper {
     });
     const nextResults = ordersResponse.next ? (await this.getOrders(ordersResponse.next)).results : [];
     const orderRes = Object.assign({}, ordersResponse, { results: [...await Promise.all(promises), ...nextResults] });
-    this.coerceNumber(orderRes);
+    this.deepCoerceNumber(orderRes);
     return orderRes
   }
 
@@ -135,7 +135,7 @@ class RobinhoodWrapper {
       interval,
       span,
     );
-    this.coerceNumber(response);
+    this.deepCoerceNumber(response);
     return response;
   }
 
@@ -150,12 +150,12 @@ class RobinhoodWrapper {
    * recursively mutates object so all number strings are coerced to number
    * TODO: unit test
    */
-  private coerceNumber(parent: any, key?: number | string) {
+  private deepCoerceNumber(parent: any, key?: number | string) {
     const child = key === undefined ? parent : parent[key];
     if (!child) {
       return;
     } else if (Array.isArray(child) || typeof child === 'object') {
-      Object.keys(child).forEach(k => this.coerceNumber(child, k));
+      Object.keys(child).forEach(k => this.deepCoerceNumber(child, k));
     } else {
       const forced = Number(child)
       if (!isNaN(forced)) {
@@ -196,6 +196,7 @@ class RobinhoodWrapper {
     })
     const chains = await Promise.all(getChainPromises);
     console.log('got chains');
+    this.deepCoerceNumber(chains);
     return chains;
   }
 
